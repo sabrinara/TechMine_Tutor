@@ -1,17 +1,11 @@
 const express = require('express');
-const app = express();
-const port = process.env.PORT || 5000;
-const cors = require('cors');
+const jwt = require('jsonwebtoken');
+const bcrypt = require('bcryptjs');
+const { MongoClient,ServerApiVersion, ObjectId } = require('mongodb');
 require('dotenv').config();
-const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
 
-// middleware
-app.use(cors({
-    origin: ['http://localhost:5173'],
-    credentials: true,
-}));
+const app = express();
 app.use(express.json());
-
 
 const uri = process.env.DB_URL;
 
@@ -23,281 +17,169 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
+const db = client.db('techmine_tutor');
+const usersCollection = db.collection('users');
+const tutorsCollection = db.collection('tutors');
 
-async function run() {
-    try {
-        // Connect the client to the server	(optional starting in v4.7)
-        const usersCollection = client.db('techmine_tutor').collection('users');
-        const tutorsCollection = client.db('techmine_tutor').collection('tutors');
-
-        // await client.connect();
-        // get all users
-        app.get('/users', async (req, res) => {
-            try {
-                const users = await usersCollection.find().toArray();
-                res.json(users);
-            } catch (error) {
-                console.error(error);
-                res.status(500).json({ error: "Internal server error" });
-            }
-        });
-
-
-
-        // get user by email
-        app.get("/users/:email", async (req, res) => {
-            try {
-                const email = req.params.email;
-                const query = { email: email };
-                const user = await usersCollection.findOne(query);
-
-                if (!user) {
-                    return res.status(404).json({ error: "User not found" });
-                }
-
-                res.json(user);
-            } catch (error) {
-                console.error(error);
-                res.status(500).json({ error: "Internal server error" });
-            }
-        });
-
-
-        // role update
-        app.patch("/users/:id", async (req, res) => {
-            try {
-                const { id } = req.params;
-                const { role } = req.body;
-
-                // Validate the role to prevent unauthorized role changes (optional)
-                const validRoles = ["user", "admin"];
-                if (!validRoles.includes(role)) {
-                    return res.status(400).json({ error: "Invalid role" });
-                }
-
-                const updatedUser = await usersCollection.findOneAndUpdate(
-                    { _id: new ObjectId(id) },
-                    { $set: { role } },
-                    { returnOriginal: false } // Return the updated document
-                );
-
-                if (!updatedUser.value) {
-                    return res.status(404).json({ error: "User not found" });
-                }
-
-                res.json(updatedUser.value);
-            } catch (error) {
-                console.error(error);
-                res.status(500).json({ error: "Internal server error" });
-            }
-        });
-        
-        //get user by id
-        app.get('/users/:id', async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) };
-            const result = await usersCollection.findOne(query);
-            res.send(result);
-        });
-
-
-
-        // post user
-        app.post('/users', async (req, res) => {
-            try {
-                const user = req.body;
-                // Validate user data here (e.g., required fields)
-
-                const query = { email: user.email };
-                const existingUser = await usersCollection.findOne(query);
-
-                if (existingUser) {
-                    return res.status(409).json({ message: 'User already exists', insertedId: null });
-                }
-
-                const result = await usersCollection.insertOne(user);
-                res.json(result);
-            } catch (error) {
-                console.error(error);
-                res.status(500).json({ error: "Internal server error" });
-            }
-        });
-
-        
-        // update user profile by name and image 
-        app.patch("/users/:email", async (req, res) => {
-            try {
-                const { email } = req.params;
-                const { name, image } = req.body;
-
-                if (!ObjectId.isValid(email)) {
-                    return res.status(400).json({ error: "Invalid user ID" });
-                }
-
-                const updatedUser = await usersCollection.findOneAndUpdate(
-                    { _id: new ObjectId(email) },
-                    { $set: { name, image } },
-                    { returnOriginal: false }
-                );
-
-                if (!updatedUser.value) {
-                    return res.status(404).json({ error: "User not found" });
-                }
-
-                res.json(updatedUser.value);
-            } catch (error) {
-                console.error(error);
-                res.status(500).json({ error: "Internal server error" });
-            }
-        })
-        //delete user
-        app.delete('/users/:id', async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) };
-            const result = await usersCollection.deleteOne(query);
-            res.send(result);
-        });
-
-
-
-        // tutors updates status
-        app.patch("/tutors/:id", async (req, res) => {
-            try {
-                const { id } = req.params;
-                const { status } = req.body;
-
-                if (!ObjectId.isValid(id)) {
-                    return res.status(400).json({ error: "Invalid tutor ID" });
-                }
-
-                const updatedTutors = await tutorsCollection.findOneAndUpdate(
-                    { _id: new ObjectId(id) },
-                    { $set: { status } },
-                    { returnOriginal: false }
-                );
-
-                if (!updatedTutors.value) {
-                    return res.status(404).json({ error: "Tutor not found" });
-                }
-
-                res.json(updatedTutors.value);
-            } catch (error) {
-                console.error(error);
-                res.status(500).json({ error: "Internal server error" });
-            }
-        });
-
-
-        //get all tutors
-        app.get('/tutors', async (req, res) => {
-            const cursor = tutorsCollection.find();
-            const result = await cursor.toArray();
-            res.send(result);
-        })
-
-        // Get single tutors
-        app.get('/tutors/:id', async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) };
-            const result = await tutorsCollection.findOne(query);
-            res.send(result);
-        });
-
-        // Post tutors
-        app.post('/tutors', async (req, res) => {
-            const tutors = req.body;
-            console.log("hit the post api", tutors);
-            const result = await tutorsCollection.insertOne(tutors);
-            res.send(result);
-        });
-
-
-        // Delete a tutors
-        app.delete('/tutors/:id', async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) };
-            const result = await tutorsCollection.deleteOne(query);
-            res.send(result);
-        });
-
-        // Update a tutors
-        app.put("/tutors/:id", async (req, res) => {
-            const { id } = req.params;
-
-            if (!ObjectId.isValid(id)) {
-                return res.status(400).json({ error: "Invalid tutor ID" });
-            }
-
-            const updatedTutors = req.body;
-
-            const result = await tutorsCollection.findOneAndUpdate(
-                { _id: new ObjectId(id) },
-                { $set: updatedTutors },
-                { returnOriginal: false }
-            );
-
-            if (!result.value) {
-                return res.status(404).json({ error: "Tutor not found" });
-            }
-
-            res.json(result.value);
-        });
-
-
-        // Update view count
-        app.put('/tutors/view/:id', async (req, res) => {
-            const id = req.params.id;
-            const query = { _id: new ObjectId(id) };
-            const update = { $inc: { views: 1 } };
-            const options = { returnOriginal: false };
-            const result = await tutorsCollection.findOneAndUpdate(query, update, options);
-            res.send(result.value);
-        });
-
-        // Approve or Decline an article
-        app.patch('/tutors/approve/:id', async (req, res) => {
-            const id = req.params.id;
-            const { status, declineReason } = req.body;
-
-            const query = { _id: new ObjectId(id) };
-            const update = status === 'approved'
-                ? { $set: { status: 'approved' } }
-                : { $set: { status: 'declined', declineReason } };
-
-            const options = { returnOriginal: false };
-            const result = await tutorsCollection.findOneAndUpdate(query, update, options);
-
-            res.send(result.value);
-        });
-
-        // Make an tutor premium
-        app.patch('/tutors/premium/:id', async (req, res) => {
-            const id = req.params.id;
-
-            const query = { _id: new ObjectId(id) };
-            const update = { $set: { isPremium: true } };
-
-            const options = { returnOriginal: false };
-            const result = await tutorsCollection.findOneAndUpdate(query, update, options);
-
-            res.send(result.value);
-        });
-
-
-        // Send a ping to confirm a successful connection
-        await client.db("admin").command({ ping: 1 });
-        console.log("Pinged your deployment. You successfully connected to MongoDB!");
-    } finally {
-        // Ensures that the client will close when you finish/error
-        // await client.close();
+// Middleware for verifying token
+const verifyToken = (req, res, next) => {
+    const token = req.headers.authorization?.split(' ')[1];
+    if (!token) {
+        return res.status(401).json({ error: 'Unauthorized' });
     }
-}
-run().catch(console.dir);
+    try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET);
+        req.user = decoded;
+        next();
+    } catch (err) {
+        res.status(401).json({ error: 'Invalid token' });
+    }
+};
 
-app.get('/', (req, res) => {
-    res.send('TechMine Tutor is running!')
-})
+// Middleware for verifying admin role
+const verifyAdmin = (req, res, next) => {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Forbidden: Admins only' });
+    }
+    next();
+};
 
-app.listen(port, () => {
-    console.log(`TechMine Tutor is running on port: ${port}`)
-})
+// Routes
+
+// Register
+app.post('/register', async (req, res) => {
+    const { name, email, password, role } = req.body;
+    if (!name || !email || !password) {
+        return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    const existingUser = await usersCollection.findOne({ email });
+    if (existingUser) {
+        return res.status(409).json({ error: 'User already exists' });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const newUser = { name, email, password: hashedPassword, role: role || 'user' };
+    const result = await usersCollection.insertOne(newUser);
+    res.status(201).json({ message: 'User registered successfully', userId: result.insertedId });
+});
+
+// Login
+app.post('/login', async (req, res) => {
+    const { email, password } = req.body;
+    const user = await usersCollection.findOne({ email });
+    if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+    }
+
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    res.status(200).json({ token });
+});
+
+// Get all tutors (No authentication required)
+app.get('/tutors', async (req, res) => {
+    const tutors = await tutorsCollection.find().toArray();
+    res.status(200).json(tutors);
+});
+
+// Get single tutor (No authentication required)
+app.get('/tutors/:id', async (req, res) => {
+    const tutor = await tutorsCollection.findOne({ _id: new ObjectId(req.params.id) });
+    if (!tutor) {
+        return res.status(404).json({ error: 'Tutor not found' });
+    }
+    res.status(200).json(tutor);
+});
+
+// Admin: Add tutor
+app.post('/tutors', verifyToken, verifyAdmin, async (req, res) => {
+    const { name, expertise, email } = req.body;
+    if (!name || !expertise || !email) {
+        return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    const result = await tutorsCollection.insertOne({ name, expertise, email });
+    res.status(201).json({ message: 'Tutor added successfully', tutorId: result.insertedId });
+});
+
+// Admin: Update tutor
+app.put('/tutors/:id', verifyToken, verifyAdmin, async (req, res) => {
+    const { name, expertise, email } = req.body;
+    const updatedTutor = await tutorsCollection.updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: { name, expertise, email } }
+    );
+    if (!updatedTutor.modifiedCount) {
+        return res.status(404).json({ error: 'Tutor not found' });
+    }
+    res.status(200).json({ message: 'Tutor updated successfully' });
+});
+
+// Admin: Delete tutor
+app.delete('/tutors/:id', verifyToken, verifyAdmin, async (req, res) => {
+    const result = await tutorsCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+    if (!result.deletedCount) {
+        return res.status(404).json({ error: 'Tutor not found' });
+    }
+    res.status(200).json({ message: 'Tutor deleted successfully' });
+});
+
+// Get all users (No authentication required)
+app.get('/users', async (req, res) => {
+    const users = await usersCollection.find().toArray();
+    res.status(200).json(users);
+});
+
+// Get single user
+app.get('/users/:id', verifyToken, async (req, res) => {
+    if (req.user.id !== req.params.id && req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const user = await usersCollection.findOne({ _id: new ObjectId(req.params.id) });
+    if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+    res.status(200).json(user);
+});
+
+// Update user (Only user can update their data)
+app.put('/users/:id', verifyToken, async (req, res) => {
+    if (req.user.id !== req.params.id && req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Access denied' });
+    }
+
+    const { name, email } = req.body;
+    const updatedUser = await usersCollection.updateOne(
+        { _id: new ObjectId(req.params.id) },
+        { $set: { name, email } }
+    );
+    if (!updatedUser.modifiedCount) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+    res.status(200).json({ message: 'User updated successfully' });
+});
+
+// Admin: Delete user
+app.delete('/users/:id', verifyToken, verifyAdmin, async (req, res) => {
+    const result = await usersCollection.deleteOne({ _id: new ObjectId(req.params.id) });
+    if (!result.deletedCount) {
+        return res.status(404).json({ error: 'User not found' });
+    }
+    res.status(200).json({ message: 'User deleted successfully' });
+});
+
+// Start the server
+const port = process.env.PORT || 5000;
+client.connect().then(() => {
+    app.listen(port, () => {
+        console.log(`TechMine Tutor Server is running on port ${port}`);
+    });
+}).catch(err => {
+    console.error('Failed to connect to MongoDB', err);
+});
