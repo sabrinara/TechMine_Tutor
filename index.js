@@ -91,6 +91,7 @@ async function run() {
                 res.status(500).json({ error: "Internal server error" });
             }
         });
+        
         //get user by id
         app.get('/users/:id', async (req, res) => {
             const id = req.params.id;
@@ -269,7 +270,7 @@ async function run() {
             res.send(result.value);
         });
 
-        // Make an article premium
+        // Make an tutor premium
         app.patch('/tutors/premium/:id', async (req, res) => {
             const id = req.params.id;
 
